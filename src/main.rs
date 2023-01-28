@@ -3,6 +3,7 @@
 #![no_main]
 
 use adc_mcp3008::Mcp3008;
+use cortex_m::delay::Delay;
 use embedded_hal::digital::v2::{InputPin, OutputPin};
 use fugit::RateExtU32;
 use panic_halt as _;
@@ -75,7 +76,7 @@ impl Controller {
         }
     }
 
-    fn process_tap_detector(&mut self, adc: &mut Mcp3008<SPI, CS>, midi: &mut MidiClass<UsbBus>) {
+    fn process_tap_detector(&mut self, adc: &mut Mcp3008<SPI, CS>, midi: &mut MidiClass<UsbBus>, delay: &mut Delay) {
         let r = adc.read_channel(adc_mcp3008::Channels8::CH0).unwrap();
         self.tap_detector_average = (r as u32 / 10) + (self.tap_detector_average * 9) / 10;
         if self.tap_detector_triggered == 0
@@ -86,6 +87,7 @@ impl Controller {
                 Message::NoteOn(self.midi_channel, Note::C3, U7::from_clamped(127)),
             );
             let _ = midi.send_message(midi_message);
+            delay.delay_ms(10);
             let midi_message = UsbMidiEventPacket::from_midi(
                 CableNumber::Cable0,
                 Message::NoteOff(self.midi_channel, Note::C3, U7::from_clamped(0)),
@@ -96,9 +98,9 @@ impl Controller {
         self.tap_detector_triggered = (self.tap_detector_triggered - 1).max(0);
     }
 
-    fn process(&mut self, adc: &mut Mcp3008<SPI, CS>, midi: &mut MidiClass<UsbBus>) {
+    fn process(&mut self, adc: &mut Mcp3008<SPI, CS>, midi: &mut MidiClass<UsbBus>, delay: &mut Delay) {
         self.process_knobs(adc, midi);
-        self.process_tap_detector(adc, midi);
+        self.process_tap_detector(adc, midi, delay);
     }
 }
 
@@ -177,7 +179,7 @@ fn main() -> ! {
 
     loop {
         usb_dev.poll(&mut [&mut midi]);
-        controller.process(&mut adc, &mut midi);
+        controller.process(&mut adc, &mut midi, &mut delay);
         delay.delay_ms(1);
     }
 }
