@@ -19,7 +19,7 @@ cargo run --release
 
 The project should build and install itself onto the Pico, then the Pico should reboot and present as a USB MIDI device named `Ortet MIDI Controller`.
 
-For more information see the rp_pico documentation: [https://github.com/rp-rs/rp-hal-boards/tree/main/boards/rp-pico]
+For more information see the rp_pico documentation: https://github.com/rp-rs/rp-hal-boards/tree/main/boards/rp-pico
 
 ## License
 
