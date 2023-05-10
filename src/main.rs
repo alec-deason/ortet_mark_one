@@ -1,9 +1,10 @@
-#![no_std]
+//! Firmware for the Ortet Mark One series of midi controllers.
+
 #![deny(warnings)]
+#![no_std]
 #![no_main]
 
 use adc_mcp3008::Mcp3008;
-use cortex_m::delay::Delay;
 use embedded_hal::digital::v2::{InputPin, OutputPin};
 use fugit::RateExtU32;
 use panic_halt as _;
@@ -17,7 +18,6 @@ use usbd_midi::{
         midi::{
             channel::Channel,
             message::{control_function::ControlFunction, Message},
-            notes::Note,
         },
         usb::constants::USB_AUDIO_CLASS,
         usb_midi::{cable_number::CableNumber, usb_midi_event_packet::UsbMidiEventPacket},
@@ -29,9 +29,7 @@ type SPI = rp2040_hal::Spi<rp2040_hal::spi::Enabled, pac::SPI1, 8>;
 type CS = rp2040_hal::gpio::Pin<Gpio16, rp2040_hal::gpio::Output<rp2040_hal::gpio::PushPull>>;
 
 struct Controller {
-    knob_values: [u8; 8],
-    tap_detector_triggered: i32,
-    tap_detector_average: u32,
+    knob_values: [[u8; 2]; 8],
 
     midi_channel: Channel,
 }
@@ -39,15 +37,13 @@ struct Controller {
 impl Controller {
     fn new(midi_channel: Channel) -> Self {
         Controller {
-            knob_values: [0; 8],
-            tap_detector_triggered: 0,
-            tap_detector_average: 0,
+            knob_values: [[0,0]; 8],
             midi_channel,
         }
     }
 
-    fn process_knobs(&mut self, adc: &mut Mcp3008<SPI, CS>, midi: &mut MidiClass<UsbBus>) {
-        for i in 1..4 {
+    fn process_knobs(&mut self, adc: &mut Mcp3008<SPI, CS>, midi: &mut MidiClass<UsbBus>) -> Result<(), ()> {
+        for i in 0..4 {
             let channel = match i {
                 0 => adc_mcp3008::Channels8::CH0,
                 1 => adc_mcp3008::Channels8::CH1,
@@ -59,48 +55,30 @@ impl Controller {
                 7 => adc_mcp3008::Channels8::CH7,
                 _ => unreachable!(),
             };
-            let r = adc.read_channel(channel).unwrap();
+            let r = adc.read_channel(channel).map_err(|_| ())?;
             let r1 = (r / 8) as u8;
-            if r1 != self.knob_values[i] {
-                self.knob_values[i] = r1;
+            if r1 != self.knob_values[i][0] && r1 != self.knob_values[i][1] {
+                // We keep two samples worth of history here because sometimes there is just enough noise
+                // to cause the value to bounce repeatedly between two adjacent values and we want to
+                // suppress that without reducing over all sensitivity.
+                self.knob_values[i][1] = self.knob_values[i][0];
+                self.knob_values[i][0] = r1;
                 let midi_message = UsbMidiEventPacket::from_midi(
                     CableNumber::Cable0,
                     Message::ControlChange(
                         self.midi_channel,
-                        ControlFunction(U7::from_clamped(i as u8 - 1)),
+                        ControlFunction(U7::from_clamped(i as u8)),
                         U7::from_clamped(r1),
                     ),
                 );
-                let _ = midi.send_message(midi_message);
+                midi.send_message(midi_message).map_err(|_| ())?;
             }
         }
+        Ok(())
     }
 
-    fn process_tap_detector(&mut self, adc: &mut Mcp3008<SPI, CS>, midi: &mut MidiClass<UsbBus>, delay: &mut Delay) {
-        let r = adc.read_channel(adc_mcp3008::Channels8::CH0).unwrap();
-        self.tap_detector_average = (r as u32 / 10) + (self.tap_detector_average * 9) / 10;
-        if self.tap_detector_triggered == 0
-            && (r as i64 - self.tap_detector_average as i64).abs() > 15
-        {
-            let midi_message = UsbMidiEventPacket::from_midi(
-                CableNumber::Cable0,
-                Message::NoteOn(self.midi_channel, Note::C3, U7::from_clamped(127)),
-            );
-            let _ = midi.send_message(midi_message);
-            delay.delay_ms(10);
-            let midi_message = UsbMidiEventPacket::from_midi(
-                CableNumber::Cable0,
-                Message::NoteOff(self.midi_channel, Note::C3, U7::from_clamped(0)),
-            );
-            let _ = midi.send_message(midi_message);
-            self.tap_detector_triggered = 100;
-        }
-        self.tap_detector_triggered = (self.tap_detector_triggered - 1).max(0);
-    }
-
-    fn process(&mut self, adc: &mut Mcp3008<SPI, CS>, midi: &mut MidiClass<UsbBus>, delay: &mut Delay) {
-        self.process_knobs(adc, midi);
-        self.process_tap_detector(adc, midi, delay);
+    fn process(&mut self, adc: &mut Mcp3008<SPI, CS>, midi: &mut MidiClass<UsbBus>) -> Result<(), ()> {
+        self.process_knobs(adc, midi)
     }
 }
 
@@ -144,7 +122,7 @@ fn main() -> ! {
     let mut midi = MidiClass::new(&usb_bus, 1, 0).unwrap();
 
     let mut usb_dev = UsbDeviceBuilder::new(&usb_bus, UsbVidPid(0x16c0, 0x5e4))
-        .product("MIDI Test")
+        .product("Ortet MIDI Controller")
         .device_class(USB_AUDIO_CLASS)
         .build();
 
@@ -179,7 +157,11 @@ fn main() -> ! {
 
     loop {
         usb_dev.poll(&mut [&mut midi]);
-        controller.process(&mut adc, &mut midi, &mut delay);
+        if controller.process(&mut adc, &mut midi).is_err() {
+            let _ = led_pin.set_low();
+            delay.delay_ms(100);
+            let _ = led_pin.set_high();
+        }
         delay.delay_ms(1);
     }
 }

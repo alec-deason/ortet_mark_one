@@ -199,24 +199,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
-name = "mark_one"
-version = "0.1.0"
-dependencies = [
- "adc-mcp3008",
- "cortex-m",
- "cortex-m-rt",
- "embedded-hal",
- "embedded-midi",
- "embedded-time",
- "fugit",
- "panic-halt",
- "rp-pico",
- "rp2040-hal",
- "usb-device",
- "usbd-midi",
-]
-
-[[package]]
 name = "memchr"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -324,6 +306,24 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "ortet_mark_one"
+version = "0.1.0"
+dependencies = [
+ "adc-mcp3008",
+ "cortex-m",
+ "cortex-m-rt",
+ "embedded-hal",
+ "embedded-midi",
+ "embedded-time",
+ "fugit",
+ "panic-halt",
+ "rp-pico",
+ "rp2040-hal",
+ "usb-device",
+ "usbd-midi",
 ]
 
 [[package]]

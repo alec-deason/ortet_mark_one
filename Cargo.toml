@@ -1,5 +1,7 @@
 [package]
-name = "mark_one"
+name = "ortet_mark_one"
+authors = ["Alec Deason"]
+license = "MIT OR Apache-2.0"
 version = "0.1.0"
 edition = "2021"
 
