@@ -4,6 +4,7 @@ authors = ["Alec Deason"]
 license = "MIT OR Apache-2.0"
 version = "0.1.0"
 edition = "2021"
+repo = "https://github.com/alec-deason/ortet_mark_one"
 
 [dependencies]
 adc-mcp3008 = {git = "https://github.com/alec-deason/adc-mcp3008" }
